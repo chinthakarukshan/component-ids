@@ -1,6 +1,9 @@
 package com.wso2telco.gsma.authenticators.voice;
 
 import com.wso2telco.Util;
+import com.wso2telco.core.config.model.MobileConnectConfig;
+import com.wso2telco.core.config.service.ConfigurationService;
+import com.wso2telco.core.config.service.ConfigurationServiceImpl;
 import com.wso2telco.gsma.authenticators.Constants;
 import com.wso2telco.gsma.authenticators.util.AuthenticationContextHelper;
 import org.apache.commons.logging.Log;
@@ -35,18 +38,22 @@ public class VoiceCallAuthenticator extends AbstractApplicationAuthenticator
     private static final String MSISDN = "msisdn";
     private static final String CLIENT_ID = "relyingParty";
     private static final String IS_FLOW_COMPLETED = "isFlowCompleted";
+    private static final String BLOB = "blob";
+    private static ConfigurationService configurationService = new ConfigurationServiceImpl();
+    private static MobileConnectConfig mobileConnectConfig = null;
 
     private static Log log = LogFactory.getLog(VoiceCallAuthenticator.class);
 
-    private final String isUserEnrolledUrl = "https://poc.vsservic.es/wso/voice/isSpeakerEnrolled";
-    private final String verifyUserUrl = "https://poc.vsservic.es/wso/voice/verifySpeaker";
+
+    static {
+        mobileConnectConfig = configurationService.getDataHolder().getMobileConnectConfig();
+    }
+
 
 
     @Override
     public AuthenticatorFlowStatus process(HttpServletRequest request, HttpServletResponse response, AuthenticationContext context) throws AuthenticationFailedException, LogoutFailedException {
-
-        log.info("Yepeeeeeeeeeeeeeeee");
-        //return super.process(request, response, context);
+        log.info("VoiceCallAuthenticator process triggered");
 
         super.process(request, response, context);
         if (context.isLogoutRequest()) {
@@ -78,6 +85,8 @@ public class VoiceCallAuthenticator extends AbstractApplicationAuthenticator
         String clientId = paramMap.get(CLIENT_ID);
         String applicationName = applicationConfig.getApplicationName();
         String sessionKey = context.getCallerSessionKey();
+        String isUserEnrolledUrl = mobileConnectConfig.getVoiceConfig().getUserEnrollmentCheckEndpoint();
+        String processingMode = mobileConnectConfig.getVoiceConfig().getBiometricProcessingMode();
 
         log.info("MSISDN : " + msisdn);
         log.info("Client ID : " + clientId);
@@ -85,15 +94,12 @@ public class VoiceCallAuthenticator extends AbstractApplicationAuthenticator
         log.info("sessionKey  : " + sessionKey);
 
         ValidSoftJsonBuilder validSoftJsonBuilder = new ValidSoftJsonBuilder();
-        validSoftJsonBuilder.setIsUserEnrollRequestJsonJson(sessionKey, msisdn, "td_demo");
+        validSoftJsonBuilder.setIsUserEnrollRequestJsonJson(sessionKey, msisdn, processingMode);
         StringEntity postData = null;
         try {
             postData = new StringEntity(validSoftJsonBuilder.getIsUserEnrollRequestJson());
-            log.info("Json Object : " + postData);
-        } catch (UnsupportedEncodingException e) {
-            e.printStackTrace();
-        }
-        try {
+            log.debug("Json Object : " + postData);
+
             boolean isUserEnrolledInValidSoft = checkUserIsEnrolledValidSoftServer(isUserEnrolledUrl, postData);
             context.setProperty(IS_FLOW_COMPLETED, false);
             if (isUserEnrolledInValidSoft) {
@@ -101,14 +107,18 @@ public class VoiceCallAuthenticator extends AbstractApplicationAuthenticator
             } else {
                 response.sendRedirect("https://localhost:9443/voice/rec.html?sessionDataKey=" + sessionKey);
             }
-        } catch (IOException e) {
-            log.error("Error occurred while redirecting request", e);
+        } catch (UnsupportedEncodingException ex) {
+            log.error("Error in building the Request", ex);
+            throw new AuthenticationFailedException("Error in Building the Request");
+        } catch (IOException ex) {
+            log.error("Error occurred while redirecting request", ex);
+            throw new AuthenticationFailedException("Error occured while redirecting request");
         }
     }
 
     @Override
     protected void processAuthenticationResponse(HttpServletRequest httpServletRequest, HttpServletResponse httpServletResponse, AuthenticationContext authenticationContext) throws AuthenticationFailedException {
-        log.info("Tagaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+        log.info("VoiceCallAuthenticator Authenticator process Authentication Response Triggered");
         String queryParams = FrameworkUtils.getQueryStringWithFrameworkContextId(authenticationContext.getQueryParams(),
                 authenticationContext.getCallerSessionKey(), authenticationContext.getContextIdentifier());
         ApplicationConfig applicationConfig = authenticationContext.getSequenceConfig().getApplicationConfig();
@@ -117,7 +127,10 @@ public class VoiceCallAuthenticator extends AbstractApplicationAuthenticator
         String clientId = paramMap.get(CLIENT_ID);
         String applicationName = applicationConfig.getApplicationName();
         String sessionKey = authenticationContext.getCallerSessionKey();
-        String voiceBlob = httpServletRequest.getParameter("blob");
+        String voiceBlob = httpServletRequest.getParameter(BLOB);
+        String isUserEnrolledUrl = mobileConnectConfig.getVoiceConfig().getUserEnrollmentCheckEndpoint();
+        String verifyUserUrl = mobileConnectConfig.getVoiceConfig().getVerifyUserEndpoint();
+        String processingMode = mobileConnectConfig.getVoiceConfig().getBiometricProcessingMode();
 
         log.info("~~~~ MSISDN : " + msisdn);
         log.info("~~~~ Client ID : " + clientId);
@@ -125,15 +138,15 @@ public class VoiceCallAuthenticator extends AbstractApplicationAuthenticator
         log.info("~~~~ sessionKey  : " + sessionKey);
         log.info("~~~~ Voice blob recieved" + voiceBlob);
         ValidSoftJsonBuilder validSoftJsonBuilder = new ValidSoftJsonBuilder();
-        validSoftJsonBuilder.setIsUserEnrollRequestJsonJson(sessionKey, msisdn, "td_demo");
+        validSoftJsonBuilder.setIsUserEnrollRequestJsonJson(sessionKey, msisdn, processingMode);
         StringEntity postData = null;
 
         try {
             postData = new StringEntity(validSoftJsonBuilder.getIsUserEnrollRequestJson());
-            log.info("Json Object : " + postData);
+            log.debug("Json Object : " + postData);
             boolean isUserEnrolledInValidSoft = checkUserIsEnrolledValidSoftServer(isUserEnrolledUrl, postData);
             if (isUserEnrolledInValidSoft) {
-                validSoftJsonBuilder.setVerifyUserJson(sessionKey,msisdn,"td_demo",voiceBlob);
+                validSoftJsonBuilder.setVerifyUserJson(sessionKey,msisdn,processingMode,voiceBlob);
                 postData = new StringEntity(validSoftJsonBuilder.getVerifyUserJson());
                 verifyUserFromValidSoftServer(verifyUserUrl , postData);
                 AuthenticationContextHelper.setSubject(authenticationContext, (String) authenticationContext.getProperty(Constants.MSISDN));
@@ -142,17 +155,19 @@ public class VoiceCallAuthenticator extends AbstractApplicationAuthenticator
                 authenticationContext.setProperty(IS_FLOW_COMPLETED, true);
                 AuthenticationContextHelper.setSubject(authenticationContext, (String) authenticationContext.getProperty(Constants.MSISDN));
             }
-        } catch (UnsupportedEncodingException e) {
-            e.printStackTrace();
-        } catch (IOException e1) {
-            e1.printStackTrace();
+        } catch (UnsupportedEncodingException ex) {
+            log.error("Error in building the Request", ex);
+            throw new AuthenticationFailedException("Error in Building the Request");
+        } catch (IOException ex) {
+            log.error("Error occurred while redirecting request", ex);
+            throw new AuthenticationFailedException("Error occured while redirecting request");
         }
 
     }
 
     @Override
     public boolean canHandle(HttpServletRequest httpServletRequest) {
-        log.info("Jabaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+        log.info("VoiceCallAuthenticator canHandle invoked");
         return true;
     }
 
