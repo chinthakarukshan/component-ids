@@ -24,22 +24,32 @@ public class ValidSoftJsonBuilder {
     }
 
     public void setIsUserEnrollRequestJsonJson(String logId , String msisdn , String mode) {
-        String jsonTemplate = "{" +
-                "\"serviceData\": {" +
-                "\"loggingId\": \"" + logId+"\"" +
-                "}," +
-                "\"userData\": {" +
-                "\"identifier\": \""+ msisdn +"\"" +
-                "}," +
-                "\"processingInformation\": {" +
-                "\"biometric\": {" +
-                "\"type\": \"text-dependent\"," +
-                "\"mode\": \""+mode+"\"" +
-                "}" +
-                "}" +
-                "}";
-        log.info("Json ::::: " + jsonTemplate);
-        this.isUserenrollRequestjson = jsonTemplate;
+        StringBuilder payloadBuilder = new StringBuilder();
+        payloadBuilder.append("{");
+        payloadBuilder.append("\"serviceData\": {");
+        payloadBuilder.append("\"loggingId\": \"");
+        payloadBuilder.append(logId);
+        payloadBuilder.append("\"");
+        payloadBuilder.append("},");
+        payloadBuilder.append("\"userData\": {");
+        payloadBuilder.append("\"identifier\": \"");
+        payloadBuilder.append(msisdn);
+        payloadBuilder.append("\"");
+        payloadBuilder.append("},");
+        payloadBuilder.append("\"processingInformation\": {");
+        payloadBuilder.append("\"biometric\": {");
+        payloadBuilder.append("\"type\": \"text-dependent\",");
+        payloadBuilder.append("\"mode\": \"");
+        payloadBuilder.append(mode);
+        payloadBuilder.append("\"");
+        payloadBuilder.append("}");
+        payloadBuilder.append("}");
+        payloadBuilder.append("}");
+
+        String payload = payloadBuilder.toString();
+
+        log.debug("Json ::::: " + payload);
+        this.isUserenrollRequestjson = payload;
     }
 
     public String getVerifyUserJson() {
@@ -47,41 +57,53 @@ public class ValidSoftJsonBuilder {
     }
 
     public void setVerifyUserJson(String logId , String msisdn , String mode , String voice) {
-        String jsonTemplate = "{" +
-                "\"serviceData\": {" +
-                "\"loggingId\": \""+logId+"\"" +
-                "}," +
-                "\"userData\": {" +
-                "\"identifier\": \""+msisdn+"\"" +
-                "}," +
-                "\"processingInformation\": {" +
-                "\"biometric\": {" +
-                "\"type\": \"text-dependent\"," +
-                "\"mode\": \""+mode+"\"" +
-                "}," +
-                "\"audioCharacteristics\": {" +
-                "\"samplingRate\": \"8000\"," +
-                "\"format\": \"alaw\"" +
-                "}," +
-                "\"metaInformation\": [" +
-                "{" +
-                "\"key\": \"usage-context\"," +
-                "\"value\": {" +
-                "\"value\": \"default\"," +
-                "\"encrypted\": \"false\"" +
-                "}" +
-                "}" +
-                "]" +
-                "}," +
-                "\"audioInput\": {" +
-                "\"secondsThreshold\": \"20\"," +
-                "\"audio\": {" +
-                "\"base64\":" +
-                "\""+voice+"\"" +
-                "}" +
-                "}" +
-                "}";
-        log.info("Json ::::: " + jsonTemplate);
-        this.verifyUserJson = jsonTemplate;
+        StringBuilder payloadBuilder = new StringBuilder();
+        payloadBuilder.append("{");
+        payloadBuilder.append("\"serviceData\": {");
+        payloadBuilder.append("\"loggingId\": \"");
+        payloadBuilder.append(logId);
+        payloadBuilder.append("\"");
+        payloadBuilder.append("},");
+        payloadBuilder.append("\"userData\": {");
+        payloadBuilder.append("\"identifier\": \"");
+        payloadBuilder.append(msisdn);
+        payloadBuilder.append("\"");
+        payloadBuilder.append("},");
+        payloadBuilder.append("\"processingInformation\": {");
+        payloadBuilder.append("\"biometric\": {");
+        payloadBuilder.append("\"type\": \"text-dependent\",");
+        payloadBuilder.append("\"mode\": \"");
+        payloadBuilder.append(mode);
+        payloadBuilder.append("\"");
+        payloadBuilder.append("},");
+        payloadBuilder.append("\"audioCharacteristics\": {");
+        payloadBuilder.append("\"samplingRate\": \"8000\",");
+        payloadBuilder.append("\"format\": \"alaw\"");
+        payloadBuilder.append("},");
+        payloadBuilder.append("\"metaInformation\": [");
+        payloadBuilder.append("{");
+        payloadBuilder.append("\"key\": \"usage-context\",");
+        payloadBuilder.append("\"value\": {");
+        payloadBuilder.append("\"value\": \"default\",");
+        payloadBuilder.append("\"encrypted\": \"false\"");
+        payloadBuilder.append("}");
+        payloadBuilder.append("}");
+        payloadBuilder.append("]");
+        payloadBuilder.append("},");
+        payloadBuilder.append("\"audioInput\": {");
+        payloadBuilder.append("\"secondsThreshold\": \"20\",");
+        payloadBuilder.append("\"audio\": {");
+        payloadBuilder.append("\"base64\":");
+        payloadBuilder.append("\"");
+        payloadBuilder.append(voice);
+        payloadBuilder.append("\"");
+        payloadBuilder.append("}");
+        payloadBuilder.append("}");
+        payloadBuilder.append("}");
+
+        String payload = payloadBuilder.toString();
+
+        log.info("Json ::::: " + payload);
+        this.verifyUserJson = payload;
     }
 }
