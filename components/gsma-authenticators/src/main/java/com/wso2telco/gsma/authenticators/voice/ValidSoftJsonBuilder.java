@@ -23,7 +23,7 @@ public class ValidSoftJsonBuilder {
         return isUserenrollRequestjson;
     }
 
-    public void setIsUserEnrollRequestJsonJson(String logId , String msisdn , String mode) {
+    public void setIsUserEnrollRequestJsonJson(String logId , String serviceId, String msisdn) {
         StringBuilder payloadBuilder = new StringBuilder();
         payloadBuilder.append("{");
         payloadBuilder.append("\"serviceData\": {");
@@ -40,7 +40,7 @@ public class ValidSoftJsonBuilder {
         payloadBuilder.append("\"biometric\": {");
         payloadBuilder.append("\"type\": \"text-dependent\",");
         payloadBuilder.append("\"mode\": \"");
-        payloadBuilder.append(mode);
+        //payloadBuilder.append(mode);
         payloadBuilder.append("\"");
         payloadBuilder.append("}");
         payloadBuilder.append("}");
@@ -56,7 +56,7 @@ public class ValidSoftJsonBuilder {
         return verifyUserJson;
     }
 
-    public void setVerifyUserJson(String logId , String msisdn , String mode , String voice) {
+    public void setVerifyUserJson(String logId , String serviceId , String msisdn , String voice) {
         StringBuilder payloadBuilder = new StringBuilder();
         payloadBuilder.append("{");
         payloadBuilder.append("\"serviceData\": {");
@@ -73,7 +73,7 @@ public class ValidSoftJsonBuilder {
         payloadBuilder.append("\"biometric\": {");
         payloadBuilder.append("\"type\": \"text-dependent\",");
         payloadBuilder.append("\"mode\": \"");
-        payloadBuilder.append(mode);
+        //payloadBuilder.append(mode);
         payloadBuilder.append("\"");
         payloadBuilder.append("},");
         payloadBuilder.append("\"audioCharacteristics\": {");

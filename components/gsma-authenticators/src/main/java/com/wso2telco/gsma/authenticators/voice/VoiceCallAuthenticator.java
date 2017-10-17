@@ -8,12 +8,19 @@ import com.wso2telco.gsma.authenticators.Constants;
 import com.wso2telco.gsma.authenticators.util.AuthenticationContextHelper;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
 import org.apache.http.HttpStatus;
 import org.apache.http.client.HttpClient;
+import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpPost;
+import org.apache.http.entity.ContentType;
 import org.apache.http.entity.StringEntity;
+import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.DefaultHttpClient;
+import org.apache.http.impl.client.HttpClients;
+import org.apache.http.util.EntityUtils;
+import org.json.JSONObject;
 import org.wso2.carbon.identity.application.authentication.framework.AbstractApplicationAuthenticator;
 import org.wso2.carbon.identity.application.authentication.framework.AuthenticatorFlowStatus;
 import org.wso2.carbon.identity.application.authentication.framework.LocalApplicationAuthenticator;
@@ -25,6 +32,7 @@ import org.wso2.carbon.identity.application.authentication.framework.util.Framew
 
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
+import javax.ws.rs.core.MediaType;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.util.Map;
@@ -39,6 +47,7 @@ public class VoiceCallAuthenticator extends AbstractApplicationAuthenticator
     private static final String CLIENT_ID = "relyingParty";
     private static final String IS_FLOW_COMPLETED = "isFlowCompleted";
     private static final String BLOB = "blob";
+    private static final String OUTCOME = "outcome";
     private static ConfigurationService configurationService = new ConfigurationServiceImpl();
     private static MobileConnectConfig mobileConnectConfig = null;
 
@@ -85,8 +94,8 @@ public class VoiceCallAuthenticator extends AbstractApplicationAuthenticator
         String clientId = paramMap.get(CLIENT_ID);
         String applicationName = applicationConfig.getApplicationName();
         String sessionKey = context.getCallerSessionKey();
-        String isUserEnrolledUrl = mobileConnectConfig.getVoiceConfig().getUserEnrollmentCheckEndpoint();
-        String processingMode = mobileConnectConfig.getVoiceConfig().getBiometricProcessingMode();
+        String userStatusCheckEndpoint = mobileConnectConfig.getVoiceConfig().getUserStatusCheckEndpoint();
+        String serviceId = mobileConnectConfig.getVoiceConfig().getServiceId();
 
         log.info("MSISDN : " + msisdn);
         log.info("Client ID : " + clientId);
@@ -94,15 +103,15 @@ public class VoiceCallAuthenticator extends AbstractApplicationAuthenticator
         log.info("sessionKey  : " + sessionKey);
 
         ValidSoftJsonBuilder validSoftJsonBuilder = new ValidSoftJsonBuilder();
-        validSoftJsonBuilder.setIsUserEnrollRequestJsonJson(sessionKey, msisdn, processingMode);
+        validSoftJsonBuilder.setIsUserEnrollRequestJsonJson(sessionKey, serviceId, msisdn);
         StringEntity postData = null;
         try {
             postData = new StringEntity(validSoftJsonBuilder.getIsUserEnrollRequestJson());
             log.debug("Json Object : " + postData);
 
-            boolean isUserEnrolledInValidSoft = checkUserIsEnrolledValidSoftServer(isUserEnrolledUrl, postData);
+            boolean isUserActive = isUserActive(userStatusCheckEndpoint, postData);
             context.setProperty(IS_FLOW_COMPLETED, false);
-            if (isUserEnrolledInValidSoft) {
+            if (isUserActive) {
                 response.sendRedirect("https://localhost:9443/voice/rec.html?sessionDataKey=" + sessionKey);
             } else {
                 response.sendRedirect("https://localhost:9443/voice/rec.html?sessionDataKey=" + sessionKey);
@@ -128,9 +137,9 @@ public class VoiceCallAuthenticator extends AbstractApplicationAuthenticator
         String applicationName = applicationConfig.getApplicationName();
         String sessionKey = authenticationContext.getCallerSessionKey();
         String voiceBlob = httpServletRequest.getParameter(BLOB);
-        String isUserEnrolledUrl = mobileConnectConfig.getVoiceConfig().getUserEnrollmentCheckEndpoint();
-        String verifyUserUrl = mobileConnectConfig.getVoiceConfig().getVerifyUserEndpoint();
-        String processingMode = mobileConnectConfig.getVoiceConfig().getBiometricProcessingMode();
+        String userStatusCheckEndpoint = mobileConnectConfig.getVoiceConfig().getUserStatusCheckEndpoint();
+        String userAuthenticationEndpoint = mobileConnectConfig.getVoiceConfig().getUserAuthenticationEndpoint();
+        String serviceId = mobileConnectConfig.getVoiceConfig().getServiceId();
 
         log.info("~~~~ MSISDN : " + msisdn);
         log.info("~~~~ Client ID : " + clientId);
@@ -138,17 +147,17 @@ public class VoiceCallAuthenticator extends AbstractApplicationAuthenticator
         log.info("~~~~ sessionKey  : " + sessionKey);
         log.info("~~~~ Voice blob recieved" + voiceBlob);
         ValidSoftJsonBuilder validSoftJsonBuilder = new ValidSoftJsonBuilder();
-        validSoftJsonBuilder.setIsUserEnrollRequestJsonJson(sessionKey, msisdn, processingMode);
+        validSoftJsonBuilder.setIsUserEnrollRequestJsonJson(sessionKey, serviceId, msisdn);
         StringEntity postData = null;
 
         try {
             postData = new StringEntity(validSoftJsonBuilder.getIsUserEnrollRequestJson());
             log.debug("Json Object : " + postData);
-            boolean isUserEnrolledInValidSoft = checkUserIsEnrolledValidSoftServer(isUserEnrolledUrl, postData);
+            boolean isUserEnrolledInValidSoft = isUserActive(userStatusCheckEndpoint, postData);
             if (isUserEnrolledInValidSoft) {
-                validSoftJsonBuilder.setVerifyUserJson(sessionKey,msisdn,processingMode,voiceBlob);
+                validSoftJsonBuilder.setVerifyUserJson(sessionKey, serviceId,msisdn,voiceBlob);
                 postData = new StringEntity(validSoftJsonBuilder.getVerifyUserJson());
-                verifyUserFromValidSoftServer(verifyUserUrl , postData);
+                verifyUserFromValidSoftServer(userAuthenticationEndpoint , postData);
                 AuthenticationContextHelper.setSubject(authenticationContext, (String) authenticationContext.getProperty(Constants.MSISDN));
                 authenticationContext.setProperty(IS_FLOW_COMPLETED, true);
             } else {
@@ -187,24 +196,36 @@ public class VoiceCallAuthenticator extends AbstractApplicationAuthenticator
     }
 
 
-    private boolean checkUserIsEnrolledValidSoftServer(String url, StringEntity postData) throws IOException {
-        HttpClient httpClient = new DefaultHttpClient();
+    private boolean isUserActive(String url, StringEntity postData) throws IOException {
+        log.info("Calling Backend to verify user status");
+        CloseableHttpClient httpClient = HttpClients.createDefault();
         HttpPost httpPost = new HttpPost(url);
-        postData.setContentType("application/json");
+        postData.setContentType(MediaType.APPLICATION_JSON);
         httpPost.setEntity(postData);
-        HttpResponse httpResponse = httpClient.execute(httpPost);
+        CloseableHttpResponse httpResponse = httpClient.execute(httpPost);
         log.info("Http code retirned from IsuserEnrolled" + httpResponse.getStatusLine().getStatusCode());
-        if (httpResponse.getStatusLine().getStatusCode() != HttpStatus.SC_OK) {
-            log.error("ValidSoft server replied with invalid HTTP status [ " + httpResponse.getStatusLine().getStatusCode()
-                    + "] ");
-            throw new IOException(
-                    "Error occurred while Calling ValidSoft server");
+        try {
+            if (httpResponse.getStatusLine().getStatusCode() != HttpStatus.SC_OK) {
+                log.error("Server replied with invalid HTTP status [ " + httpResponse.getStatusLine().getStatusCode()
+                        + "] ");
+                throw new IOException("Error occurred while Calling Backend endpoint");
 
-        } else {
-            log.info("ValidSoft server replied with OK HTTP status [ " + httpResponse.getStatusLine().getStatusCode());
-            return true;
+            } else {
+                log.info("Server replied with OK HTTP status [ " + httpResponse.getStatusLine().getStatusCode());
+                HttpEntity responseEntity = httpResponse.getEntity();
+                String responseBody = EntityUtils.toString(responseEntity);
+                JSONObject object = new JSONObject(responseBody);
+                String outcome = object.getString(OUTCOME);
+                if (outcome.equals(Outcome.ACTIVE.getOutcome())) {
+                    return true;
+                } else {
+                    return false;
+                }
+
+            }
+        } finally {
+            httpResponse.close();
         }
-
     }
 
     private boolean verifyUserFromValidSoftServer(String url, StringEntity postData) throws IOException {
@@ -228,6 +249,27 @@ public class VoiceCallAuthenticator extends AbstractApplicationAuthenticator
 
 
 
+    }
+
+
+    private boolean sendHttpPostAndRetrieveResponse (String endpoint, StringEntity postData) throws IOException {
+        CloseableHttpClient httpClient = HttpClients.createDefault();
+        HttpPost httpPost = new HttpPost(endpoint);
+        postData.setContentType(MediaType.APPLICATION_JSON);
+        httpPost.setEntity(postData);
+        CloseableHttpResponse httpResponse= httpClient.execute(httpPost);
+        try {
+            if (httpResponse.getStatusLine().getStatusCode() != HttpStatus.SC_OK) {
+                log.error("ValidSoft server replied with invalid HTTP status [ " + httpResponse.getStatusLine().getStatusCode()
+                    + "] ");
+                return false;
+            } else {
+                log.info("ValidSoft server replied with OK HTTP status [ " + httpResponse.getStatusLine().getStatusCode());
+                return true;
+            }
+        } finally {
+            httpResponse.close();
+        }
     }
 
 
