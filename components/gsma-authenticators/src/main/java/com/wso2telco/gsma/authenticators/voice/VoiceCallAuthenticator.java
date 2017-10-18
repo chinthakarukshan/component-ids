@@ -14,7 +14,6 @@ import org.apache.http.HttpStatus;
 import org.apache.http.client.HttpClient;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpPost;
-import org.apache.http.entity.ContentType;
 import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.DefaultHttpClient;
@@ -95,26 +94,35 @@ public class VoiceCallAuthenticator extends AbstractApplicationAuthenticator
         String applicationName = applicationConfig.getApplicationName();
         String sessionKey = context.getCallerSessionKey();
         String userStatusCheckEndpoint = mobileConnectConfig.getVoiceConfig().getUserStatusCheckEndpoint();
+        String userOnboardEndpoint = mobileConnectConfig.getVoiceConfig().getUserOnboardEndpoint();
         String serviceId = mobileConnectConfig.getVoiceConfig().getServiceId();
+        ValidSoftJsonBuilder validSoftJsonBuilder = new ValidSoftJsonBuilder();
 
         log.info("MSISDN : " + msisdn);
         log.info("Client ID : " + clientId);
         log.info("Application name : " + applicationName);
         log.info("sessionKey  : " + sessionKey);
 
-        ValidSoftJsonBuilder validSoftJsonBuilder = new ValidSoftJsonBuilder();
-        validSoftJsonBuilder.setIsUserEnrollRequestJsonJson(sessionKey, serviceId, msisdn);
-        StringEntity postData = null;
-        try {
-            postData = new StringEntity(validSoftJsonBuilder.getIsUserEnrollRequestJson());
-            log.debug("Json Object : " + postData);
 
-            boolean isUserActive = isUserActive(userStatusCheckEndpoint, postData);
+        String userActiveJson = validSoftJsonBuilder.getIsUserActiveJson(serviceId, sessionKey, msisdn);
+        try {
+            StringEntity userActivePostData = new StringEntity(userActiveJson);
+
+            boolean isUserActive = isUserActive(userStatusCheckEndpoint, userActivePostData);
             context.setProperty(IS_FLOW_COMPLETED, false);
             if (isUserActive) {
                 response.sendRedirect("https://localhost:9443/voice/rec.html?sessionDataKey=" + sessionKey);
             } else {
-                response.sendRedirect("https://localhost:9443/voice/rec.html?sessionDataKey=" + sessionKey);
+                String onboardUserString = validSoftJsonBuilder.getOnboardUserJson(serviceId, sessionKey, msisdn);
+                StringEntity onboardUserPostData = new StringEntity(onboardUserString);
+                boolean isUserOnboarded = onboardUserAndRetrieveStatus(userOnboardEndpoint, onboardUserPostData);
+                if (isUserOnboarded) {
+                    response.sendRedirect("https://localhost:9443/voice/rec.html?sessionDataKey=" + sessionKey);
+                } else {
+                    log.error("Error in Onboarding the User");
+                    throw new AuthenticationFailedException("Error in Onboarding the user");
+                }
+
             }
         } catch (UnsupportedEncodingException ex) {
             log.error("Error in building the Request", ex);
@@ -140,16 +148,16 @@ public class VoiceCallAuthenticator extends AbstractApplicationAuthenticator
         String userStatusCheckEndpoint = mobileConnectConfig.getVoiceConfig().getUserStatusCheckEndpoint();
         String userAuthenticationEndpoint = mobileConnectConfig.getVoiceConfig().getUserAuthenticationEndpoint();
         String serviceId = mobileConnectConfig.getVoiceConfig().getServiceId();
+        ValidSoftJsonBuilder validSoftJsonBuilder = new ValidSoftJsonBuilder();
 
         log.info("~~~~ MSISDN : " + msisdn);
         log.info("~~~~ Client ID : " + clientId);
         log.info("~~~~ Application name : " + applicationName);
         log.info("~~~~ sessionKey  : " + sessionKey);
         log.info("~~~~ Voice blob recieved" + voiceBlob);
-        ValidSoftJsonBuilder validSoftJsonBuilder = new ValidSoftJsonBuilder();
+
         validSoftJsonBuilder.setIsUserEnrollRequestJsonJson(sessionKey, serviceId, msisdn);
         StringEntity postData = null;
-
         try {
             postData = new StringEntity(validSoftJsonBuilder.getIsUserEnrollRequestJson());
             log.debug("Json Object : " + postData);
@@ -198,6 +206,7 @@ public class VoiceCallAuthenticator extends AbstractApplicationAuthenticator
 
     private boolean isUserActive(String url, StringEntity postData) throws IOException {
         log.info("Calling Backend to verify user status");
+        boolean isUserActive = false;
         CloseableHttpClient httpClient = HttpClients.createDefault();
         HttpPost httpPost = new HttpPost(url);
         postData.setContentType(MediaType.APPLICATION_JSON);
@@ -217,10 +226,9 @@ public class VoiceCallAuthenticator extends AbstractApplicationAuthenticator
                 JSONObject object = new JSONObject(responseBody);
                 String outcome = object.getString(OUTCOME);
                 if (outcome.equals(Outcome.ACTIVE.getOutcome())) {
-                    return true;
-                } else {
-                    return false;
+                    isUserActive = true;
                 }
+                return isUserActive;
 
             }
         } finally {
@@ -252,20 +260,31 @@ public class VoiceCallAuthenticator extends AbstractApplicationAuthenticator
     }
 
 
-    private boolean sendHttpPostAndRetrieveResponse (String endpoint, StringEntity postData) throws IOException {
+    private boolean onboardUserAndRetrieveStatus (String endpoint, StringEntity postData) throws IOException {
+        log.info("Calling Backend to verify user status");
+        boolean isUserActive = false;
         CloseableHttpClient httpClient = HttpClients.createDefault();
         HttpPost httpPost = new HttpPost(endpoint);
         postData.setContentType(MediaType.APPLICATION_JSON);
         httpPost.setEntity(postData);
-        CloseableHttpResponse httpResponse= httpClient.execute(httpPost);
+        CloseableHttpResponse httpResponse = httpClient.execute(httpPost);
         try {
             if (httpResponse.getStatusLine().getStatusCode() != HttpStatus.SC_OK) {
-                log.error("ValidSoft server replied with invalid HTTP status [ " + httpResponse.getStatusLine().getStatusCode()
-                    + "] ");
-                return false;
+                log.error("Server replied with invalid HTTP status [ " + httpResponse.getStatusLine().getStatusCode()
+                        + "] ");
+                throw new IOException("Error occurred while Calling Backend endpoint");
+
             } else {
-                log.info("ValidSoft server replied with OK HTTP status [ " + httpResponse.getStatusLine().getStatusCode());
-                return true;
+                log.info("Server replied with OK HTTP status [ " + httpResponse.getStatusLine().getStatusCode());
+                HttpEntity responseEntity = httpResponse.getEntity();
+                String responseBody = EntityUtils.toString(responseEntity);
+                JSONObject object = new JSONObject(responseBody);
+                String outcome = object.getString(OUTCOME);
+                if (outcome.equals(Outcome.AUTHENTICATED.getOutcome())) {
+                    isUserActive = true;
+                }
+                return isUserActive;
+
             }
         } finally {
             httpResponse.close();

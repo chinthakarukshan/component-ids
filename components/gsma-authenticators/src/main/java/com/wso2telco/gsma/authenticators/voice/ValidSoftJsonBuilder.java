@@ -106,4 +106,74 @@ public class ValidSoftJsonBuilder {
         log.info("Json ::::: " + payload);
         this.verifyUserJson = payload;
     }
+
+    public String getIsUserActiveJson (String serviceId, String loggingId , String msisdn) {
+        StringBuilder payloadBuilder = new StringBuilder();
+        payloadBuilder.append("{");
+        payloadBuilder.append("\"serviceData\": {");
+        payloadBuilder.append("\"serviceId\": \"");
+        payloadBuilder.append(serviceId);
+        payloadBuilder.append("\",");
+        payloadBuilder.append("\"loggingId\": \"");
+        payloadBuilder.append(loggingId);
+        payloadBuilder.append("\"");
+        payloadBuilder.append("},");
+        payloadBuilder.append("\"userData\": {");
+        payloadBuilder.append("\"identifier\": \"");
+        payloadBuilder.append(msisdn);
+        payloadBuilder.append("\"");
+        payloadBuilder.append("}");
+        payloadBuilder.append("}");
+
+        String userActiveJson = payloadBuilder.toString();
+
+        return userActiveJson;
+
+    }
+
+    public String getAuthenticateUserJson(String serviceId, String loggingId , String msisdn) {
+        StringBuilder payloadBuilder = new StringBuilder();
+        payloadBuilder.append("{");
+        payloadBuilder.append("\"serviceData\": {");
+        payloadBuilder.append("\"serviceId\": \"");
+        payloadBuilder.append(serviceId);
+        payloadBuilder.append("\",");
+        payloadBuilder.append("\"loggingId\": \"");
+        payloadBuilder.append(loggingId);
+        payloadBuilder.append("\"");
+        payloadBuilder.append("},");
+        payloadBuilder.append("\"userData\": {");
+        payloadBuilder.append("\"identifier\": \"");
+        payloadBuilder.append(msisdn);
+        payloadBuilder.append("\"");
+        payloadBuilder.append("}");
+        payloadBuilder.append("}");
+
+        String authenticateUserJson = payloadBuilder.toString();
+
+        return authenticateUserJson;
+    }
+
+    public String getOnboardUserJson (String serviceId, String loggingId , String msisdn) {
+        StringBuilder payloadBuilder = new StringBuilder();
+        payloadBuilder.append("{");
+        payloadBuilder.append("\"serviceData\": {");
+        payloadBuilder.append("\"serviceId\": \"");
+        payloadBuilder.append(serviceId);
+        payloadBuilder.append("\",");
+        payloadBuilder.append("\"loggingId\": \"");
+        payloadBuilder.append(loggingId);
+        payloadBuilder.append("\"");
+        payloadBuilder.append("},");
+        payloadBuilder.append("\"userData\": {");
+        payloadBuilder.append("\"identifier\": \"");
+        payloadBuilder.append(msisdn);
+        payloadBuilder.append("\"");
+        payloadBuilder.append("}");
+        payloadBuilder.append("}");
+
+        String onboardUserJson = payloadBuilder.toString();
+
+        return onboardUserJson;
+    }
 }
